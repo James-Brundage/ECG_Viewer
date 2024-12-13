@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECG Prediction App</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>ECG Prediction App</h1>
+
+    <!-- File Upload Form -->
+    <form id="uploadForm">
+        <input type="file" name="file" id="fileInput" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <!-- Column Selector for Scatterplot -->
+    <div id="columnSelector" style="display:none;">
+        <h3>Select Columns for Scatterplot</h3>
+        <select id="xColumn"></select>
+        <select id="yColumn"></select>
+        <button id="generatePlot">Generate Scatterplot</button>
+        <select id="colorColumn">
+            <option value="">Select Color Column</option>
+        </select>
+    </div>
+
+    <!-- Scatterplot -->
+    <div id="scatterplot"></div>
+
+    <!-- ECG Quality Score and Note Form -->
+    <h3>ECG Quality Score & Note</h3>
+    <form id="ecg-form">
+        <label for="quality-score">Quality Score:</label>
+        <select id="quality-score" name="quality-score">
+            <option value="Good">Good</option>
+            <option value="Bad">Bad</option>
+            <option value="No Quality">No Quality</option>
+        </select>
+        <br><br>
+        
+        <label for="note">Note:</label>
+        <textarea id="note" name="note" rows="4" cols="50"></textarea>
+        <br><br>
+
+        <button type="submit">Save</button>
+        <!-- Export Button -->
+        <button id="exportButton">Export CSV</button>
+        
+    </form>
+    <div id="successMessage" style="display: none; color: green;">Quality score and note saved successfully!</div>
+    <!-- ECG Image Display -->
+    <div id="ecgPlot">
+        <h3>ECG Data</h3>
+        <img id="ecgImage" src="" alt="ECG Plot">
+    </div>
+
+
+    
+
+
+    
+
+    <script>
+        const uploadForm = document.getElementById('uploadForm');
+        const columnSelector = document.getElementById('columnSelector');
+        const scatterplot = document.getElementById('scatterplot');
+        const ecgPlot = document.getElementById('ecgPlot');
+        const ecgImage = document.getElementById('ecgImage');
+        const ecgForm = document.getElementById('ecg-form');
+        const exportButton = document.getElementById('exportButton');
+        let uploadedFilename;
+        let currentIndex;
+
+        // Handle file upload
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(uploadForm);
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            if (response.ok) {
+                uploadedFilename = formData.get('file').name;
+                const xColumn = document.getElementById('xColumn');
+                const yColumn = document.getElementById('yColumn');
+                const colorColumn = document.getElementById('colorColumn');
+                xColumn.innerHTML = data.columns.map(col => `<option value="${col}">${col}</option>`).join('');
+                yColumn.innerHTML = data.columns.map(col => `<option value="${col}">${col}</option>`).join('');
+                colorColumn.innerHTML = data.columns.map(col => `<option value="${col}">${col}</option>`).join('');
+
+                columnSelector.style.display = 'block';
+            } else {
+                alert(data.error);
+            }
+        });
+
+        // Generate scatterplot
+        document.getElementById('generatePlot').addEventListener('click', async () => {
+            const x_col = document.getElementById('xColumn').value;
+            const y_col = document.getElementById('yColumn').value;
+            const color_col = document.getElementById('colorColumn').value;  // Get the color column
+
+            const response = await fetch('/scatterplot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: uploadedFilename, x_col, y_col, color_col })
+            });
+
+            const figData = await response.json();
+            Plotly.newPlot('scatterplot', figData.data, figData.layout);
+
+            scatterplot.on('plotly_click', async (eventData) => {
+                // Get the clicked point index
+                const originalIndex = eventData.points[0].customdata;
+                // console.log(`Original Index: ${originalIndex}`);
+
+                // Clear the ECG image source before loading a new one
+                ecgImage.src = '';  // Reset the image before loading new one
+
+                // Fetch ECG data for the clicked point
+                const ecgResponse = await fetch('/ecg', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: uploadedFilename, index: originalIndex })
+                });
+                const ecgData = await ecgResponse.json();
+                
+                ecgImage.src = ecgData.ecg_plot;  // Set the ECG image source
+                currentIndex = ecgData.original_index;
+                
+                
+                // Show the ECG form for editing quality score and notes
+                ecgForm.style.display = 'block';
+                document.getElementById('quality-score').value = ecgData.quality_score || 'Good'; // Default to 'Good' if empty
+                document.getElementById('note').value = ecgData.note || ''; // Default to empty note
+            });
+        });
+
+        // Handle saving quality score and note
+        ecgForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const qualityScore = document.getElementById('quality-score').value;
+            const note = document.getElementById('note').value;
+
+            
+
+
+            const response = await fetch('/update_ecg', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    index: currentIndex,
+                    quality_score: qualityScore,
+                    note: note,
+                    filename: uploadedFilename
+                })
+            });
+
+            const result = await response.json();
+
+        });
+
+        // Export CSV functionality
+        exportButton.addEventListener('click', async () => {
+            const response = await fetch('/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: uploadedFilename })
+            });
+
+            if (response.ok) {
+                // Trigger the download of the updated CSV file
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = uploadedFilename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } else {
+                alert('Error exporting CSV!');
+            }
+        });
+    </script>
+</body>
+</html>

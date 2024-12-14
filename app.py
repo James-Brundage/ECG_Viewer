@@ -5,13 +5,17 @@ from flask import Flask, render_template, request, jsonify, send_file
 import pandas as pd
 import plotly.express as px
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import os
 import numpy as np
+
+target_file = 'Sample_Data.csv'
 
 app = Flask(__name__, static_folder='static')
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['TARGET_FILE'] = target_file
 
 # Route for the homepage
 @app.route('/')
@@ -21,24 +25,26 @@ def index():
 # Route to handle file upload
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
+    # if 'file' not in request.files:
+    #     return jsonify({'error': 'No file uploaded'}), 400
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    # file = request.files['file']
+    # if file.filename == '':
+    #     return jsonify({'error': 'No selected file'}), 400
 
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-    file.save(filepath)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], app.config['TARGET_FILE'])
+    # file.save(filepath)
 
-    df = pd.read_csv(filepath)
+    print('Running...')
+    df = pd.read_csv(app.config['TARGET_FILE'])
+    print(df.head())
 
     df['Quality_Score']= 'No Quality'
     df['Note'] = 'No Note'
     df['original_index'] = df.index
 
     df.to_csv(filepath, index=False)
-    return jsonify({'columns': list(df.columns)})
+    return jsonify({'columns': list(df.columns), 'filename':app.config['TARGET_FILE']})
 
 # Route to generate scatterplot
 @app.route('/scatterplot', methods=['POST'])
@@ -52,28 +58,66 @@ def scatterplot():
     color_col = data['color_col']
 
     # Map unique categories to discrete colors
-    
-    custom_colors = {
-        'No Quality': 'black',
-        'Good': 'green',
-        'Bad': 'red',
-    }
-    
-    # Assign colors based on the custom color map
-    df['color'] = df[color_col].map(custom_colors)
 
+    # Check if the color_col is continuous (numeric)
+    # Check if color_col is continuous or categorical
+    if np.issubdtype(df[color_col].dtype, np.number):  # Continuous
+        # Normalize the values for the color scale
+        colorscale = 'Viridis'  # Choose a Plotly colorscale
+        
+        scatter_data = {
+            'x': df[x_col].tolist(),
+            'y': df[y_col].tolist(),
+            'mode': 'markers',
+            'marker': {
+                'size': 10,
+                'color': df[color_col].tolist(),  # Pass the continuous column
+                'colorscale': colorscale,  # Set the Plotly colorscale
+                'colorbar': {
+                    'title': 'Color Scale',  # Title for the colorbar
+                    'titleside': 'right'
+                }
+            },
+            'type': 'scatter'
+        }
 
-    scatter_data = {
-    "x": df[x_col].tolist(),
-    "y": df[y_col].tolist(),
-    "customdata": df['original_index'].tolist(),  # Pass the original indices
-    "mode": "markers",
-    "type": "scatter",
-    "marker": {"color": df['color'].tolist(),
-                "size":10},
-    'text': df['Sex'].tolist(),  # Custom column for hover text
-    'hoverinfo': 'x+y+text+customdata'  # Display x, y, and the custom text
-    }
+    else:
+        if color_col == 'Quality_Score':
+            custom_colors = {
+                'No Quality': 'black',
+                'Good': 'green',
+                'Bad': 'red',
+            }
+            # Assign colors based on the custom color map
+            df['color'] = df[color_col].map(custom_colors)
+        
+        else:
+            # Flexible handling for other categorical variables
+            unique_categories = df[color_col].dropna().unique()  # Get unique categories
+            default_palette = plt.cm.tab10.colors  # Use a default color palette (Matplotlib Tab10)
+            
+            # Dynamically assign hex colors for the unique categories
+            category_colors = {
+                category: mcolors.rgb2hex(default_palette[i % len(default_palette)])
+                for i, category in enumerate(unique_categories)
+            }
+            
+            # Map colors to the DataFrame
+            df['color'] = df[color_col].map(category_colors)
+    
+        # Print resulting color mapping for verification
+        # print(df[[color_col, 'color']].drop_duplicates())
+        scatter_data = {
+        "x": df[x_col].tolist(),
+        "y": df[y_col].tolist(),
+        "customdata": df['original_index'].tolist(),  # Pass the original indices
+        "mode": "markers",
+        "type": "scatter",
+        "marker": {"color": df['color'].tolist(),
+                    "size":10},
+        'text': df['Sex'].tolist(),  # Custom column for hover text
+        'hoverinfo': 'x+y+text+customdata'  # Display x, y, and the custom text
+        }
 
     scatter_layout = {
         "title": "Scatterplot",

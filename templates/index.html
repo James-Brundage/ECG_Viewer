@@ -11,8 +11,8 @@
 
     <!-- File Upload Form -->
     <form id="uploadForm">
-        <input type="file" name="file" id="fileInput" required>
-        <button type="submit">Upload</button>
+        <!-- <input type="file" name="file" id="fileInput" required> -->
+        <button type="submit">Load Data</button>
     </form>
 
     <!-- Column Selector for Scatterplot -->
@@ -63,7 +63,7 @@
     
 
     <script>
-        const uploadForm = document.getElementById('uploadForm');
+        // const uploadForm = document.getElementById('uploadForm');
         const columnSelector = document.getElementById('columnSelector');
         const scatterplot = document.getElementById('scatterplot');
         const ecgPlot = document.getElementById('ecgPlot');
@@ -76,14 +76,14 @@
         // Handle file upload
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const formData = new FormData(uploadForm);
+            // const formData = new FormData(uploadForm);
             const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
+                method: 'POST'
+                // body: formData
             });
             const data = await response.json();
             if (response.ok) {
-                uploadedFilename = formData.get('file').name;
+                uploadedFilename = data.filename;
                 const xColumn = document.getElementById('xColumn');
                 const yColumn = document.getElementById('yColumn');
                 const colorColumn = document.getElementById('colorColumn');

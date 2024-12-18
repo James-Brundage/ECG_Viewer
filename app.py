@@ -8,14 +8,16 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import os
 import numpy as np
+import sys
 
-target_file = 'Sample_Data.csv'
+# Import args
+args = sys.argv
 
 app = Flask(__name__, static_folder='static')
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['TARGET_FILE'] = target_file
+app.config['TARGET_FILE'] = args[1]
 
 # Route for the homepage
 @app.route('/')
@@ -32,7 +34,7 @@ def upload_file():
     # if file.filename == '':
     #     return jsonify({'error': 'No selected file'}), 400
 
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], app.config['TARGET_FILE'])
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'New_Data.csv')
     # file.save(filepath)
 
     print('Running...')
@@ -44,13 +46,13 @@ def upload_file():
     df['original_index'] = df.index
 
     df.to_csv(filepath, index=False)
-    return jsonify({'columns': list(df.columns), 'filename':app.config['TARGET_FILE']})
+    return jsonify({'columns': list(df.columns), 'filename':filepath})
 
 # Route to generate scatterplot
 @app.route('/scatterplot', methods=['POST'])
 def scatterplot():
     data = request.get_json()
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], data['filename'])
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'New_Data.csv')
     df = pd.read_csv(filepath)
 
     x_col = data['x_col']
@@ -68,6 +70,7 @@ def scatterplot():
         scatter_data = {
             'x': df[x_col].tolist(),
             'y': df[y_col].tolist(),
+            "customdata": df['original_index'].tolist(),
             'mode': 'markers',
             'marker': {
                 'size': 10,
@@ -114,15 +117,17 @@ def scatterplot():
         "mode": "markers",
         "type": "scatter",
         "marker": {"color": df['color'].tolist(),
-                    "size":10},
-        'text': df['Sex'].tolist(),  # Custom column for hover text
-        'hoverinfo': 'x+y+text+customdata'  # Display x, y, and the custom text
+                    "size":10}
+#         'text': df['Sex'].tolist(),  # Custom column for hover text
+#         'hoverinfo': 'x+y+text+customdata'  # Display x, y, and the custom text
         }
 
     scatter_layout = {
         "title": "Scatterplot",
         "xaxis": {"title": x_col},
-        "yaxis": {"title": y_col}
+        "yaxis": {"title": y_col},
+        "hovermode": 'closest', 
+        "clickmode": 'event+select'
     }
 
     figure = {"data": [scatter_data], "layout": scatter_layout}
@@ -133,7 +138,7 @@ def scatterplot():
 @app.route('/ecg', methods=['POST'])
 def ecg():
     data = request.get_json()
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], data['filename'])
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'New_Data.csv')
     
     print(data)
     # df is the uploaded file
@@ -186,7 +191,7 @@ def update_ecg():
     quality_score = data['quality_score']
     note = data['note']
 
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], data['filename'])
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'New_Data.csv')
 
     df=pd.read_csv(filepath)
 
@@ -209,16 +214,16 @@ def export_csv():
     # Get the filename from the request (you can also keep track of the uploaded filename in a session or global variable)
     data = request.get_json()
     filename = data.get('filename')
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'New_Data.csv')
     print(filepath)
     # Load the updated DataFrame
     df = pd.read_csv(filepath)
     print(df.head())
     # Save the DataFrame back to the CSV
-    df.to_csv(filepath, index=False)
+    df.to_csv(args[2], index=False)
 
-    # Send the updated CSV file back as a downloadable file
-    return send_file(filepath, as_attachment=True)
+#     # Send the updated CSV file back as a downloadable file
+#     return send_file(filepath, as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=True, host='0.0.0.0', port=7402)
